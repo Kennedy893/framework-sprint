@@ -91,7 +91,7 @@ public class FrontServlet extends HttpServlet
                     dispatcher.forward(req, resp);
                 } 
                 resp.setContentType("text/plain;charset=UTF-8");
-                resp.getWriter().println("URL trouvee : " + path);
+                resp.getWriter().println("\n URL trouvee : " + path);
                 resp.getWriter().println("-> Controleur : " + controllerName);
                 resp.getWriter().println("-> Methode : " + methodName);
             } catch (Exception e) {
