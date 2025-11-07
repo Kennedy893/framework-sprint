@@ -70,13 +70,17 @@ public class FrontServlet extends HttpServlet
         {
             try {
                 Object controller = method.getDeclaringClass().getDeclaredConstructor().newInstance();
-                method.invoke(controller);
+                Object result = method.invoke(controller);
                 
                 String controllerName = method.getDeclaringClass().getSimpleName();
                 String methodName = method.getName();
 
+                if (result instanceof String) 
+                {
+                    resp.getWriter().println("Resultat retourne : " + result);
+                }
                 resp.setContentType("text/plain;charset=UTF-8");
-                resp.getWriter().println("URL trouvee : " + path);
+                resp.getWriter().println("\n URL trouvee : " + path);
                 resp.getWriter().println("-> Controleur : " + controllerName);
                 resp.getWriter().println("-> Methode : " + methodName);
             } catch (Exception e) {
