@@ -8,8 +8,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.util.Map;
+import jakarta.servlet.RequestDispatcher;
 
 import init.*;
+import view.*;
 
 public class FrontServlet extends HttpServlet 
 {
@@ -70,11 +72,24 @@ public class FrontServlet extends HttpServlet
         {
             try {
                 Object controller = method.getDeclaringClass().getDeclaredConstructor().newInstance();
-                method.invoke(controller);
+                Object result =  method.invoke(controller);
                 
                 String controllerName = method.getDeclaringClass().getSimpleName();
                 String methodName = method.getName();
 
+                if (result instanceof String) 
+                {
+                    resp.getWriter().println("Resultat retourne : " + result);
+                }
+                else if (result instanceof view.ModelView) 
+                {
+                    ModelView mv = (ModelView) result;
+                    String view = mv.getView();
+
+                    req.setAttribute("view", view);
+                    RequestDispatcher dispatcher = req.getRequestDispatcher("/views/view.jsp");
+                    dispatcher.forward(req, resp);
+                } 
                 resp.setContentType("text/plain;charset=UTF-8");
                 resp.getWriter().println("URL trouvee : " + path);
                 resp.getWriter().println("-> Controleur : " + controllerName);
