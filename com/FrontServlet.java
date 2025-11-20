@@ -81,13 +81,18 @@ public class FrontServlet extends HttpServlet
                 {
                     resp.getWriter().println("Resultat retourne : " + result);
                 }
-                else if (result instanceof view.ModelView) 
+                else if (result instanceof ModelView) 
                 {
                     ModelView mv = (ModelView) result;
                     String view = mv.getView();
 
-                    req.setAttribute("view", view);
-                    RequestDispatcher dispatcher = req.getRequestDispatcher("/views/view.jsp");
+                    for (Map.Entry<String, Object> entry : mv.getData().entrySet()) 
+                    {
+                        req.setAttribute(entry.getKey(), entry.getValue());
+                    }
+
+                    // req.setAttribute("view", view);
+                    RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + view);
                     dispatcher.forward(req, resp);
                 } 
                 resp.setContentType("text/plain;charset=UTF-8");
