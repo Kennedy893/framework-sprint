@@ -196,11 +196,13 @@ public class FrontServlet extends HttpServlet
         Map<String, UrlDefinition> defs = ControllerScanner.getUrlMappings();
         boolean matched = false;
 
-        for (UrlDefinition def : defs.values()) {
+        for (UrlDefinition def : defs.values()) 
+        {
 
             String regex = "^" + def.getRegex() + "$";
 
-            if (path.matches(regex)) {
+            if (path.matches(regex)) 
+            {
                 matched = true;
 
                 try {
@@ -215,7 +217,8 @@ public class FrontServlet extends HttpServlet
                     String[] pathParts = path.split("/");
                     String[] patternParts = def.getPattern().split("/");
 
-                    for (int i = 0; i < patternParts.length; i++) {
+                    for (int i = 0; i < patternParts.length; i++) 
+                    {
                         if (patternParts[i].startsWith("{")) {
                             String var = patternParts[i].substring(1, patternParts[i].length() - 1);
                             extracted.put(var, pathParts[i]);
@@ -227,7 +230,8 @@ public class FrontServlet extends HttpServlet
                     Parameter[] params = method.getParameters();
                     Object[] args = new Object[params.length];
 
-                    for (int i = 0; i < params.length; i++) {
+                    for (int i = 0; i < params.length; i++) 
+                    {
                         String name = params[i].getName();
                         String strValue = extracted.get(name);
 
@@ -243,23 +247,23 @@ public class FrontServlet extends HttpServlet
                     Object result = method.invoke(controller, args);
 
                     // --- Gérer le retour ---
-                    // if (result instanceof String) {
-                    //     resp.setContentType("text/plain;charset=UTF-8");
-                    //     resp.getWriter().println(result);
-                    //     return;
-                    // }
+                    if (result instanceof String) {
+                        resp.setContentType("text/plain;charset=UTF-8");
+                        resp.getWriter().println(result);
+                        return;
+                    }
 
-                    // if (result instanceof ModelView) {
-                    //     ModelView mv = (ModelView) result;
+                    if (result instanceof ModelView) {
+                        ModelView mv = (ModelView) result;
 
-                    //     for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
-                    //         req.setAttribute(entry.getKey(), entry.getValue());
-                    //     }
+                        for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
+                            req.setAttribute(entry.getKey(), entry.getValue());
+                        }
 
-                    //     RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + mv.getView());
-                    //     dispatcher.forward(req, resp);
-                    //     return;
-                    // }
+                        RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + mv.getView());
+                        dispatcher.forward(req, resp);
+                        return;
+                    }
 
                     // --- Affichage --------------------------------------------------------
                     resp.setContentType("text/plain;charset=UTF-8");
