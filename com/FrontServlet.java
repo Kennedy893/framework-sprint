@@ -100,57 +100,90 @@ public class FrontServlet extends HttpServlet
 
 
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException 
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException, ServletException 
     {
         String uri = req.getRequestURI();
         String context = req.getContextPath();
+        String relativePath = uri.substring(context.length());
 
-        String path = uri.startsWith(context) ? uri.substring(context.length()) : uri;
-
-        if (path.isEmpty() || path.equals("/")) {
-            path = "/"; // valeur par defaut
+        // --- CAS 1 : FICHIER STATIC (HTML / JSP) ---------------------------------
+        if (handleStaticFile(relativePath, req, resp)) {
+            return;
         }
 
-        Map<String, Method> mappings = ControllerScanner.getUrlMappings();
 
+        // --- CAS 2 : URL MAPPeE PAR ANNOTATION (CONTROLLER SCANNER) --------------
+        String path = relativePath.isEmpty() ? "/" : relativePath;
+
+        Map<String, Method> mappings = ControllerScanner.getUrlMappings();
         Method method = mappings.get(path);
+
         if (method != null) 
         {
             try {
                 Object controller = method.getDeclaringClass().getDeclaredConstructor().newInstance();
-                Object result =  method.invoke(controller);
-                
+                // Object result = method.invoke(controller);
+
                 String controllerName = method.getDeclaringClass().getSimpleName();
                 String methodName = method.getName();
 
+                //  Injection automatique des paramètres (Méthode 1)
+                Object[] args = bindParameters(req, method);
+
+                //  Appel de la méthode avec les arguments injectés
+                Object result = method.invoke(controller, args);
+
+                // --- Si le resultat est un texte simple ---------------------------
                 if (result instanceof String) 
                 {
+                    resp.setContentType("text/plain;charset=UTF-8");
                     resp.getWriter().println("Resultat retourne : " + result);
                 }
+
+                // --- Si le resultat est un ModelView ------------------------------
                 else if (result instanceof ModelView) 
                 {
                     ModelView mv = (ModelView) result;
-                    String view = mv.getView();
+                    // String view = mv.getView();
 
-                    for (Map.Entry<String, Object> entry : mv.getData().entrySet()) 
-                    {
+                    // // Injecte les donnees dans la requete
+                    // for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
+                    //     req.setAttribute(entry.getKey(), entry.getValue());
+                    // }
+
+                    // RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + view);
+                    // dispatcher.forward(req, resp);
+                    // return;
+
+                    // -Sprint 6 - Injecte les données dans la requête
+                    for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
                         req.setAttribute(entry.getKey(), entry.getValue());
                     }
 
-                    // req.setAttribute("view", view);
-                    RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + view);
+                    RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + mv.getView());
                     dispatcher.forward(req, resp);
-                } 
+                    return;
+                }
+
+                // --- Debug --------------------------------------------------------
                 resp.setContentType("text/plain;charset=UTF-8");
                 resp.getWriter().println("\n URL trouvee : " + path);
                 resp.getWriter().println("-> Controleur : " + controllerName);
                 resp.getWriter().println("-> Methode : " + methodName);
+
+                return;
+
             } catch (Exception e) {
                 e.printStackTrace();
+                resp.sendError(500, "Erreur interne du serveur : " + e.getMessage());
+                return;
             }
-        } else {
-            resp.getWriter().println("404 - Aucune methode trouvee pour " + path);
         }
+
+
+        // --- CAS 3 : Aucune URL trouvee ------------------------------------------
+        resp.setContentType("text/plain;charset=UTF-8");
+        resp.getWriter().println("404 - Aucune methode trouvee pour " + path);
     }
 
 
