@@ -16,56 +16,83 @@ import view.*;
 
 public class FrontServlet extends HttpServlet 
 {
-    private boolean handleStaticFile(String relativePath, HttpServletRequest req, HttpServletResponse resp) 
-        throws IOException, ServletException 
-    {
-        String realPath = getServletContext().getRealPath(relativePath);
-        File file = new File(realPath);
-
-        if (!file.exists() || !file.isFile()) {
-            return false;
-        }
-
-        // JSP → doit être traité par Tomcat
-        if (relativePath.endsWith(".jsp")) {
-            RequestDispatcher dispatcher = req.getRequestDispatcher(relativePath);
-            dispatcher.forward(req, resp);
-            return true;
-        }
-
-        // HTML statique
-        if (relativePath.endsWith(".html")) {
-            resp.setContentType("text/html");
-            try (FileInputStream fis = new FileInputStream(file);
-                OutputStream os = resp.getOutputStream()) {
-                fis.transferTo(os);
-            }
-            return true;
-        }
-
-        return false;
+    private boolean handleStaticFile(String relativePath, HttpServletRequest req, HttpServletResponse resp) throws IOException, ServletException 
+    { 
+        String realPath = getServletContext().getRealPath(relativePath); 
+        File file = new File(realPath); 
+        if (!file.exists() || !file.isFile()) 
+        { 
+            return false; 
+        } 
+        // JSP → doit être traité par Tomcat 
+        if (relativePath.endsWith(".jsp")) 
+        { 
+            RequestDispatcher dispatcher = req.getRequestDispatcher(relativePath); 
+            dispatcher.forward(req, resp); 
+            return true; 
+        } 
+        // HTML statique 
+        if (relativePath.endsWith(".html")) 
+        { 
+            resp.setContentType("text/html"); 
+            try (FileInputStream fis = new FileInputStream(file); 
+                OutputStream os = resp.getOutputStream()) { 
+                    fis.transferTo(os); 
+            } 
+            return true; 
+        } 
+        return false; 
     }
 
+    // --Sprint 6 : tsotra
+    // public Object[] bindParameters(HttpServletRequest req, Method method) throws Exception 
+    // {
+    //     Class<?>[] paramTypes = method.getParameterTypes();
+    //     Object[] args = new Object[paramTypes.length];
 
-    public Object[] bindParameters(HttpServletRequest req, Method method) throws Exception 
+    //     java.lang.reflect.Parameter[] params = method.getParameters();
+
+    //     for (int i = 0; i < paramTypes.length; i++) {
+    //         String paramName = params[i].getName(); // nom du paramètre
+    //         String value = req.getParameter(paramName);
+
+    //         if (paramTypes[i] == int.class) {
+    //             args[i] = value != null ? Integer.parseInt(value) : 0;
+    //         } else if (paramTypes[i] == double.class) {
+    //             args[i] = value != null ? Double.parseDouble(value) : 0.0;
+    //         } else if (paramTypes[i] == boolean.class) {
+    //             args[i] = value != null ? Boolean.parseBoolean(value) : false;
+    //         } else {
+    //             args[i] = value; // String ou autres objets
+    //         }
+    //     }
+
+    //     return args;
+    // }
+
+    // --Sprint 6-bis : @RequestParam
+    private Object[] bindParameters(HttpServletRequest req, Method method) 
     {
         Class<?>[] paramTypes = method.getParameterTypes();
+        java.lang.reflect.Parameter[] params = method.getParameters();
         Object[] args = new Object[paramTypes.length];
 
-        java.lang.reflect.Parameter[] params = method.getParameters();
+        for (int i = 0; i < params.length; i++) {
+            if (params[i].isAnnotationPresent(annotation.RequestParam.class)) {
+                String paramName = params[i].getAnnotation(annotation.RequestParam.class).value();
+                String value = req.getParameter(paramName);
 
-        for (int i = 0; i < paramTypes.length; i++) {
-            String paramName = params[i].getName(); // nom du paramètre
-            String value = req.getParameter(paramName);
-
-            if (paramTypes[i] == int.class) {
-                args[i] = value != null ? Integer.parseInt(value) : 0;
-            } else if (paramTypes[i] == double.class) {
-                args[i] = value != null ? Double.parseDouble(value) : 0.0;
-            } else if (paramTypes[i] == boolean.class) {
-                args[i] = value != null ? Boolean.parseBoolean(value) : false;
+                if (paramTypes[i] == String.class) {
+                    args[i] = value;
+                } else if (paramTypes[i] == int.class || paramTypes[i] == Integer.class) {
+                    args[i] = value != null ? Integer.parseInt(value) : 0;
+                } else if (paramTypes[i] == double.class || paramTypes[i] == Double.class) {
+                    args[i] = value != null ? Double.parseDouble(value) : 0.0;
+                } else {
+                    args[i] = value; // pour d’autres types, on peut améliorer plus tard
+                }
             } else {
-                args[i] = value; // String ou autres objets
+                args[i] = null; // valeur par défaut si pas annoté
             }
         }
 
