@@ -15,43 +15,89 @@ import view.*;
 
 public class FrontServlet extends HttpServlet 
 {
+    private boolean handleStaticFile(String relativePath, HttpServletRequest req, HttpServletResponse resp) throws IOException, ServletException 
+    { 
+        String realPath = getServletContext().getRealPath(relativePath); 
+        File file = new File(realPath); 
+        if (!file.exists() || !file.isFile()) 
+        { 
+            return false; 
+        } 
+        // JSP → doit être traité par Tomcat 
+        if (relativePath.endsWith(".jsp")) 
+        { 
+            RequestDispatcher dispatcher = req.getRequestDispatcher(relativePath); 
+            dispatcher.forward(req, resp); 
+            return true; 
+        } 
+        // HTML statique 
+        if (relativePath.endsWith(".html")) 
+        { 
+            resp.setContentType("text/html"); 
+            try (FileInputStream fis = new FileInputStream(file); 
+                OutputStream os = resp.getOutputStream()) { 
+                    fis.transferTo(os); 
+            } 
+            return true; 
+        } 
+        return false; 
+    }
 
-    // @Override
-    // protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException, ServletException 
+    // --Sprint 6 : tsotra
+    // public Object[] bindParameters(HttpServletRequest req, Method method) throws Exception 
     // {
-    //     service(req, resp);
-    // }
+    //     Class<?>[] paramTypes = method.getParameterTypes();
+    //     Object[] args = new Object[paramTypes.length];
 
-    // @Override
-    // protected void service(HttpServletRequest req, HttpServletResponse resp) throws IOException, ServletException 
-    // {
-    //     String uri = req.getRequestURI();
-    //     String context = req.getContextPath();
-    //     String path = getServletContext().getRealPath(uri.substring(context.length()));
+    //     java.lang.reflect.Parameter[] params = method.getParameters();
 
-    //     File file = new File(path);
-    //     resp.setContentType("text/html");
+    //     for (int i = 0; i < paramTypes.length; i++) {
+    //         String paramName = params[i].getName(); // nom du paramètre
+    //         String value = req.getParameter(paramName);
 
-    //     if (file.exists() && file.isFile()) 
-    //     {
-    //         // Verifie si c’est un fichier statique (html, jsp, etc.)
-    //         if (uri.endsWith(".html") || uri.endsWith(".jsp")) 
-    //         {
-    //             try (FileInputStream fis = new FileInputStream(file);
-    //                  OutputStream os = resp.getOutputStream()) {
-    //                 fis.transferTo(os);
-    //             }
-    //         } 
-    //         else {
-    //             // Si c’est une ressource dynamique
-    //             RequestDispatcher dispatcher = req.getRequestDispatcher(uri.substring(context.length()));
-    //             dispatcher.forward(req, resp);
+    //         if (paramTypes[i] == int.class) {
+    //             args[i] = value != null ? Integer.parseInt(value) : 0;
+    //         } else if (paramTypes[i] == double.class) {
+    //             args[i] = value != null ? Double.parseDouble(value) : 0.0;
+    //         } else if (paramTypes[i] == boolean.class) {
+    //             args[i] = value != null ? Boolean.parseBoolean(value) : false;
+    //         } else {
+    //             args[i] = value; // String ou autres objets
     //         }
-    //     } 
-    //     else {
-    //         resp.getWriter().println("<h3>Requete URL : " + uri + "</h3>");
     //     }
+
+    //     return args;
     // }
+
+    // --Sprint 6-bis : @RequestParam
+    private Object[] bindParameters(HttpServletRequest req, Method method) 
+    {
+        Class<?>[] paramTypes = method.getParameterTypes();
+        java.lang.reflect.Parameter[] params = method.getParameters();
+        Object[] args = new Object[paramTypes.length];
+
+        for (int i = 0; i < params.length; i++) {
+            if (params[i].isAnnotationPresent(annotation.RequestParam.class)) {
+                String paramName = params[i].getAnnotation(annotation.RequestParam.class).value();
+                String value = req.getParameter(paramName);
+
+                if (paramTypes[i] == String.class) {
+                    args[i] = value;
+                } else if (paramTypes[i] == int.class || paramTypes[i] == Integer.class) {
+                    args[i] = value != null ? Integer.parseInt(value) : 0;
+                } else if (paramTypes[i] == double.class || paramTypes[i] == Double.class) {
+                    args[i] = value != null ? Double.parseDouble(value) : 0.0;
+                } else {
+                    args[i] = value; // pour d’autres types, on peut améliorer plus tard
+                }
+            } else {
+                args[i] = null; // valeur par défaut si pas annoté
+            }
+        }
+
+        return args;
+    }
+
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException 
