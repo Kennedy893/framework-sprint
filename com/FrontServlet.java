@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.HashMap;
 import java.util.Map;
 import jakarta.servlet.RequestDispatcher;
 
@@ -116,75 +117,171 @@ public class FrontServlet extends HttpServlet
         // --- CAS 2 : URL MAPPeE PAR ANNOTATION (CONTROLLER SCANNER) --------------
         String path = relativePath.isEmpty() ? "/" : relativePath;
 
-        Map<String, Method> mappings = ControllerScanner.getUrlMappings();
-        Method method = mappings.get(path);
 
-        if (method != null) 
-        {
-            try {
-                Object controller = method.getDeclaringClass().getDeclaredConstructor().newInstance();
-                // Object result = method.invoke(controller);
+        // SPRINT 6 et 6 BIS --------------------------------------------
+        // Map<String, Method> mappings = ControllerScanner.getUrlMappings();
+        // Method method = mappings.get(path);
 
-                String controllerName = method.getDeclaringClass().getSimpleName();
-                String methodName = method.getName();
+        // if (method != null) 
+        // {
+        //     try {
+        //         Object controller = method.getDeclaringClass().getDeclaredConstructor().newInstance();
+        //         // Object result = method.invoke(controller);
 
-                //  Injection automatique des paramètres (Méthode 1)
-                Object[] args = bindParameters(req, method);
+        //         String controllerName = method.getDeclaringClass().getSimpleName();
+        //         String methodName = method.getName();
 
-                //  Appel de la méthode avec les arguments injectés
-                Object result = method.invoke(controller, args);
+        //         //  Injection automatique des paramètres (Méthode 1)
+        //         Object[] args = bindParameters(req, method);
 
-                // --- Si le resultat est un texte simple ---------------------------
-                if (result instanceof String) 
-                {
-                    resp.setContentType("text/plain;charset=UTF-8");
-                    resp.getWriter().println("Resultat retourne : " + result);
-                }
+        //         //  Appel de la méthode avec les arguments injectés
+        //         Object result = method.invoke(controller, args);
 
-                // --- Si le resultat est un ModelView ------------------------------
-                else if (result instanceof ModelView) 
-                {
-                    ModelView mv = (ModelView) result;
-                    // String view = mv.getView();
+        //         // --- Si le resultat est un texte simple ---------------------------
+        //         if (result instanceof String) 
+        //         {
+        //             resp.setContentType("text/plain;charset=UTF-8");
+        //             resp.getWriter().println("Resultat retourne : " + result);
+        //         }
 
-                    // // Injecte les donnees dans la requete
-                    // for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
-                    //     req.setAttribute(entry.getKey(), entry.getValue());
-                    // }
+        //         // --- Si le resultat est un ModelView ------------------------------
+        //         else if (result instanceof ModelView) 
+        //         {
+        //             ModelView mv = (ModelView) result;
+        //             // String view = mv.getView();
 
-                    // RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + view);
-                    // dispatcher.forward(req, resp);
-                    // return;
+        //             // // Injecte les donnees dans la requete
+        //             // for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
+        //             //     req.setAttribute(entry.getKey(), entry.getValue());
+        //             // }
 
-                    // -Sprint 6 - Injecte les données dans la requête
-                    for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
-                        req.setAttribute(entry.getKey(), entry.getValue());
+        //             // RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + view);
+        //             // dispatcher.forward(req, resp);
+        //             // return;
+
+        //             // -Sprint 6 - Injecte les données dans la requête
+        //             for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
+        //                 req.setAttribute(entry.getKey(), entry.getValue());
+        //             }
+
+        //             RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + mv.getView());
+        //             dispatcher.forward(req, resp);
+        //             return;
+        //         }
+
+        //         // --- Affichage --------------------------------------------------------
+        //         resp.setContentType("text/plain;charset=UTF-8");
+        //         resp.getWriter().println("\n URL trouvee : " + path);
+        //         resp.getWriter().println("-> Controleur : " + controllerName);
+        //         resp.getWriter().println("-> Methode : " + methodName);
+
+        //         return;
+
+        //     } catch (Exception e) {
+        //         e.printStackTrace();
+        //         resp.sendError(500, "Erreur interne du serveur : " + e.getMessage());
+        //         return;
+        //     }
+        // }
+
+        // // --- CAS 3 : Aucune URL trouvee 
+        // resp.setContentType("text/plain;charset=UTF-8");
+        // resp.getWriter().println("404 - Aucune methode trouvee pour " + path);
+
+        // -------------------------------------------------------------------
+
+
+        // SPRINT 6 TER ---------------------
+
+        Map<String, UrlDefinition> defs = ControllerScanner.getUrlMappings();
+        boolean matched = false;
+
+        for (UrlDefinition def : defs.values()) {
+
+            String regex = "^" + def.getRegex() + "$";
+
+            if (path.matches(regex)) {
+                matched = true;
+
+                try {
+                    Method method = def.getMethod();
+                    Object controller = method.getDeclaringClass().getDeclaredConstructor().newInstance();
+                    String controllerName = method.getDeclaringClass().getSimpleName();
+                    String methodName = method.getName();
+
+                    // --- Extraire valeurs dynamiques {id} ---
+                    Map<String, String> extracted = new HashMap<>();
+
+                    String[] pathParts = path.split("/");
+                    String[] patternParts = def.getPattern().split("/");
+
+                    for (int i = 0; i < patternParts.length; i++) {
+                        if (patternParts[i].startsWith("{")) {
+                            String var = patternParts[i].substring(1, patternParts[i].length() - 1);
+                            extracted.put(var, pathParts[i]);
+                        }
                     }
 
-                    RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + mv.getView());
-                    dispatcher.forward(req, resp);
+                    // --- binder les paramètres ---
+
+                    Parameter[] params = method.getParameters();
+                    Object[] args = new Object[params.length];
+
+                    for (int i = 0; i < params.length; i++) {
+                        String name = params[i].getName();
+                        String strValue = extracted.get(name);
+
+                        if (params[i].getType() == int.class || params[i].getType() == Integer.class) {
+                            args[i] = Integer.parseInt(strValue);
+                        } 
+                        else {
+                            args[i] = strValue; // String par défaut
+                        }
+                    }
+
+                    // --- Appeler la méthode ---
+                    Object result = method.invoke(controller, args);
+
+                    // --- Gérer le retour ---
+                    // if (result instanceof String) {
+                    //     resp.setContentType("text/plain;charset=UTF-8");
+                    //     resp.getWriter().println(result);
+                    //     return;
+                    // }
+
+                    // if (result instanceof ModelView) {
+                    //     ModelView mv = (ModelView) result;
+
+                    //     for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
+                    //         req.setAttribute(entry.getKey(), entry.getValue());
+                    //     }
+
+                    //     RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + mv.getView());
+                    //     dispatcher.forward(req, resp);
+                    //     return;
+                    // }
+
+                    // --- Affichage --------------------------------------------------------
+                    resp.setContentType("text/plain;charset=UTF-8");
+                    resp.getWriter().println("\n URL trouvee : " + path);
+                    resp.getWriter().println("-> Controleur : " + controllerName);
+                    resp.getWriter().println("-> Methode : " + methodName);
+                    
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    resp.sendError(500, "Erreur URL dynamique : " + e.getMessage());
                     return;
                 }
 
-                // --- Debug --------------------------------------------------------
-                resp.setContentType("text/plain;charset=UTF-8");
-                resp.getWriter().println("\n URL trouvee : " + path);
-                resp.getWriter().println("-> Controleur : " + controllerName);
-                resp.getWriter().println("-> Methode : " + methodName);
-
-                return;
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                resp.sendError(500, "Erreur interne du serveur : " + e.getMessage());
-                return;
             }
         }
 
+        // Si aucun motif ne correspond
+        if (!matched) {
+            resp.setContentType("text/plain;charset=UTF-8");
+            resp.getWriter().println("404 - Aucune méthode trouvée pour " + path);
+        }
 
-        // --- CAS 3 : Aucune URL trouvee ------------------------------------------
-        resp.setContentType("text/plain;charset=UTF-8");
-        resp.getWriter().println("404 - Aucune methode trouvee pour " + path);
     }
 
 
