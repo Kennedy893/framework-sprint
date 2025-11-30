@@ -72,33 +72,85 @@ public class FrontServlet extends HttpServlet
     // }
 
     // --Sprint 6-bis : @RequestParam
-    private Object[] bindParameters(HttpServletRequest req, Method method) 
-    {
+    // private Object[] bindParameters(HttpServletRequest req, Method method) 
+    // {
+    //     Class<?>[] paramTypes = method.getParameterTypes();
+    //     java.lang.reflect.Parameter[] params = method.getParameters();
+    //     Object[] args = new Object[paramTypes.length];
+
+    //     for (int i = 0; i < params.length; i++) {
+    //         if (params[i].isAnnotationPresent(annotation.RequestParam.class)) {
+    //             String paramName = params[i].getAnnotation(annotation.RequestParam.class).value();
+    //             String value = req.getParameter(paramName);
+
+    //             if (paramTypes[i] == String.class) {
+    //                 args[i] = value;
+    //             } else if (paramTypes[i] == int.class || paramTypes[i] == Integer.class) {
+    //                 args[i] = value != null ? Integer.parseInt(value) : 0;
+    //             } else if (paramTypes[i] == double.class || paramTypes[i] == Double.class) {
+    //                 args[i] = value != null ? Double.parseDouble(value) : 0.0;
+    //             } else {
+    //                 args[i] = value; // pour d’autres types, on peut améliorer plus tard
+    //             }
+    //         } else {
+    //             args[i] = null; // valeur par défaut si pas annoté
+    //         }
+    //     }
+
+    //     return args;
+    // }
+
+    // version unifiée
+    private Object[] bindParameters(
+        HttpServletRequest req,
+        Method method,
+        Map<String, String> extractedVars
+    ) {
         Class<?>[] paramTypes = method.getParameterTypes();
         java.lang.reflect.Parameter[] params = method.getParameters();
         Object[] args = new Object[paramTypes.length];
 
         for (int i = 0; i < params.length; i++) {
-            if (params[i].isAnnotationPresent(annotation.RequestParam.class)) {
-                String paramName = params[i].getAnnotation(annotation.RequestParam.class).value();
-                String value = req.getParameter(paramName);
 
-                if (paramTypes[i] == String.class) {
-                    args[i] = value;
-                } else if (paramTypes[i] == int.class || paramTypes[i] == Integer.class) {
+            String name = params[i].getName();
+            String value = null;
+
+            // 1) priorité aux variables {id} dans l'URL
+            if (extractedVars.containsKey(name)) {
+                value = extractedVars.get(name);
+            }
+            // 2) sinon paramètres du formulaire GET/POST
+            else if (req.getParameter(name) != null) {
+                value = req.getParameter(name);
+            }
+            // 3) sinon @RequestParam
+            else if (params[i].isAnnotationPresent(annotation.RequestParam.class)) {
+                String paramName = params[i].getAnnotation(annotation.RequestParam.class).value();
+                value = req.getParameter(paramName);
+            }
+
+            // conversion des types
+            if (paramTypes[i] == String.class) {
+                args[i] = value;
+            }
+            else if (paramTypes[i] == int.class || paramTypes[i] == Integer.class) {
+                try {
                     args[i] = value != null ? Integer.parseInt(value) : 0;
-                } else if (paramTypes[i] == double.class || paramTypes[i] == Double.class) {
-                    args[i] = value != null ? Double.parseDouble(value) : 0.0;
-                } else {
-                    args[i] = value; // pour d’autres types, on peut améliorer plus tard
+                } catch (NumberFormatException e) {
+                    throw new RuntimeException("Impossible de convertir '" + value + "' en entier.");
                 }
-            } else {
-                args[i] = null; // valeur par défaut si pas annoté
+            }
+            else if (paramTypes[i] == double.class || paramTypes[i] == Double.class) {
+                args[i] = value != null ? Double.parseDouble(value) : 0.0;
+            }
+            else {
+                args[i] = value;
             }
         }
 
         return args;
     }
+
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
@@ -169,32 +221,33 @@ public class FrontServlet extends HttpServlet
 
                     // --- BINDING DES PARAMETRES ---------------------------------
                     Parameter[] params = method.getParameters();
-                    Object[] args = new Object[params.length];
+                    // Object[] args = new Object[params.length];
+                    Object[] args = bindParameters(req, method);
 
                     for (int i = 0; i < params.length; i++) 
                     {
                         String paramName = params[i].getName();
                         String strValue = null;
 
-                        // Priorité 1 : URL dynamique {id}
-                        if (extracted.containsKey(paramName)) {
-                            strValue = extracted.get(paramName);
-                        }
-                        // Priorité 2 : POST / GET form-data
-                        else if (req.getParameter(paramName) != null) {
-                            strValue = req.getParameter(paramName);
-                        }
+                        // // Priorité 1 : URL dynamique {id}
+                        // if (extracted.containsKey(paramName)) {
+                        //     strValue = extracted.get(paramName);
+                        // }
+                        // // Priorité 2 : POST / GET form-data
+                        // else if (req.getParameter(paramName) != null) {
+                        //     strValue = req.getParameter(paramName);
+                        // }
 
-                        // Conversion automatique
-                        if (params[i].getType() == int.class || params[i].getType() == Integer.class) {
-                            args[i] = Integer.parseInt(strValue);
-                        }
-                        else if (params[i].getType() == double.class || params[i].getType() == Double.class) {
-                            args[i] = Double.parseDouble(strValue);
-                        }
-                        else {
-                            args[i] = strValue;
-                        }
+                        // // Conversion automatique
+                        // if (params[i].getType() == int.class || params[i].getType() == Integer.class) {
+                        //     args[i] = Integer.parseInt(strValue);
+                        // }
+                        // else if (params[i].getType() == double.class || params[i].getType() == Double.class) {
+                        //     args[i] = Double.parseDouble(strValue);
+                        // }
+                        // else {
+                        //     args[i] = strValue;
+                        // }
                     }
 
                     // --- INVOCATION ------------------------------------------------
