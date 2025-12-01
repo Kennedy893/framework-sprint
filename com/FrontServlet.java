@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import jakarta.servlet.RequestDispatcher;
@@ -17,6 +20,20 @@ import view.*;
 
 public class FrontServlet extends HttpServlet 
 {
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+        throws IOException, ServletException 
+    {
+        handleRequest(req, resp);
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+        throws IOException, ServletException 
+    {
+        handleRequest(req, resp);
+    }
+    
     private boolean handleStaticFile(String relativePath, HttpServletRequest req, HttpServletResponse resp) throws IOException, ServletException 
     { 
         String realPath = getServletContext().getRealPath(relativePath); 
@@ -25,7 +42,7 @@ public class FrontServlet extends HttpServlet
         { 
             return false; 
         } 
-        // JSP → doit être traité par Tomcat 
+        // JSP → doit être traite par Tomcat 
         if (relativePath.endsWith(".jsp")) 
         { 
             RequestDispatcher dispatcher = req.getRequestDispatcher(relativePath); 
@@ -90,80 +107,127 @@ public class FrontServlet extends HttpServlet
     //             } else if (paramTypes[i] == double.class || paramTypes[i] == Double.class) {
     //                 args[i] = value != null ? Double.parseDouble(value) : 0.0;
     //             } else {
-    //                 args[i] = value; // pour d’autres types, on peut améliorer plus tard
+    //                 args[i] = value; // pour d’autres types, on peut ameliorer plus tard
     //             }
     //         } else {
-    //             args[i] = null; // valeur par défaut si pas annoté
+    //             args[i] = null; // valeur par defaut si pas annote
+    //         }
+    //     }
+
+    //     return args;
+    // }
+    
+
+    // version unifiee
+    // private Object[] bindParameters(
+    //     HttpServletRequest req,
+    //     Method method,
+    //     Map<String, String> extractedVars
+    // ) {
+    //     Class<?>[] paramTypes = method.getParameterTypes();
+    //     java.lang.reflect.Parameter[] params = method.getParameters();
+    //     Object[] args = new Object[paramTypes.length];
+
+    //     for (int i = 0; i < params.length; i++) {
+
+    //         String name = params[i].getName();
+    //         String value = null;
+
+    //         // 1) priorite aux variables {id} dans l'URL
+    //         if (extractedVars.containsKey(name)) {
+    //             value = extractedVars.get(name);
+    //         }
+    //         // 2) sinon paramètres du formulaire GET/POST
+    //         else if (req.getParameter(name) != null) {
+    //             value = req.getParameter(name);
+    //         }
+    //         // 3) sinon @RequestParam
+    //         else if (params[i].isAnnotationPresent(annotation.RequestParam.class)) {
+    //             String paramName = params[i].getAnnotation(annotation.RequestParam.class).value();
+    //             value = req.getParameter(paramName);
+    //         }
+
+    //         // conversion des types
+    //         if (paramTypes[i] == String.class) {
+    //             args[i] = value;
+    //         }
+    //         else if (paramTypes[i] == int.class || paramTypes[i] == Integer.class) {
+    //             try {
+    //                 args[i] = value != null ? Integer.parseInt(value) : 0;
+    //             } catch (NumberFormatException e) {
+    //                 throw new RuntimeException("Impossible de convertir '" + value + "' en entier.");
+    //             }
+    //         }
+    //         else if (paramTypes[i] == double.class || paramTypes[i] == Double.class) {
+    //             args[i] = value != null ? Double.parseDouble(value) : 0.0;
+    //         }
+    //         else if (Map.class.isAssignableFrom(paramTypes[i])) {
+    //             args[i] = new HashMap<String, Object>();
+    //         }
+
+    //         else {
+    //             args[i] = value;    
     //         }
     //     }
 
     //     return args;
     // }
 
-    // version unifiée
-    private Object[] bindParameters(
-        HttpServletRequest req,
-        Method method,
-        Map<String, String> extractedVars
-    ) {
-        Class<?>[] paramTypes = method.getParameterTypes();
-        java.lang.reflect.Parameter[] params = method.getParameters();
-        Object[] args = new Object[paramTypes.length];
+    // SPRINT 8 : MAP
+    private Object[] bindParameters(HttpServletRequest req, Method method) 
+    {
+        Parameter[] params = method.getParameters();
+        Object[] args = new Object[params.length];
 
-        for (int i = 0; i < params.length; i++) {
+        // Verifications : arg=Map; cle=String; valeur=Object
+        for (int i = 0; i < params.length; i++) 
+        {
+            Parameter param = params[i];
 
-            String name = params[i].getName();
-            String value = null;
-
-            // 1) priorité aux variables {id} dans l'URL
-            if (extractedVars.containsKey(name)) {
-                value = extractedVars.get(name);
-            }
-            // 2) sinon paramètres du formulaire GET/POST
-            else if (req.getParameter(name) != null) {
-                value = req.getParameter(name);
-            }
-            // 3) sinon @RequestParam
-            else if (params[i].isAnnotationPresent(annotation.RequestParam.class)) {
-                String paramName = params[i].getAnnotation(annotation.RequestParam.class).value();
-                value = req.getParameter(paramName);
-            }
-
-            // conversion des types
-            if (paramTypes[i] == String.class) {
-                args[i] = value;
-            }
-            else if (paramTypes[i] == int.class || paramTypes[i] == Integer.class) {
-                try {
-                    args[i] = value != null ? Integer.parseInt(value) : 0;
-                } catch (NumberFormatException e) {
-                    throw new RuntimeException("Impossible de convertir '" + value + "' en entier.");
+            // Vérifier si le paramètre est une Map
+            if (Map.class.isAssignableFrom(param.getType())) 
+            {
+                // Vérification du type générique
+                Type genericType = param.getParameterizedType();
+                if (genericType instanceof ParameterizedType pt) 
+                {
+                    Type[] typeArgs = pt.getActualTypeArguments();
+                    if (typeArgs.length != 2 ||
+                        typeArgs[0] != String.class ||
+                        typeArgs[1] != Object.class) {
+                        throw new RuntimeException(
+                            "Erreur : le paramètre Map doit être de type Map<String,Object> dans la méthode " +
+                            method.getName()
+                        );
+                    }
+                } 
+                else {
+                    // Pas de type générique spécifié → on considère que c'est incorrect
+                    throw new RuntimeException(
+                        "Erreur : le paramètre Map doit avoir des types génériques dans la méthode " +
+                        method.getName()
+                    );
                 }
-            }
-            else if (paramTypes[i] == double.class || paramTypes[i] == Double.class) {
-                args[i] = value != null ? Double.parseDouble(value) : 0.0;
-            }
-            else {
-                args[i] = value;
+
+                // Construction de la Map<String,Object> depuis les paramètres du formulaire
+                Map<String, Object> model = new HashMap<>();
+                req.getParameterMap().forEach((key, values) -> {
+                    if (values.length == 1) {
+                        model.put(key, values[0]);
+                    } else {
+                        model.put(key, Arrays.asList(values));
+                    }
+                });
+
+                args[i] = model;
+
+            } else {
+                // Paramètre non autorisé → framework impose Map uniquement
+                args[i] = null;
             }
         }
 
         return args;
-    }
-
-
-    @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-        throws IOException, ServletException 
-    {
-        handleRequest(req, resp);
-    }
-
-    @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
-        throws IOException, ServletException 
-    {
-        handleRequest(req, resp);
     }
 
     protected void handleRequest(HttpServletRequest req, HttpServletResponse resp)
@@ -182,7 +246,7 @@ public class FrontServlet extends HttpServlet
         // --- CAS 2 : URL CONTROLLER SCANNER --------------------------------------
         String path = relativePath.isEmpty() ? "/" : relativePath;
 
-        // Récupérer les URL definies pour la methode HTTP correspondante
+        // Recuperer les URL definies pour la methode HTTP correspondante
         Map<String, UrlDefinition> defs =
                 methodHTTP.equals("POST") ?
                         ControllerScanner.getPostmappings() :
@@ -220,38 +284,10 @@ public class FrontServlet extends HttpServlet
                     }
 
                     // --- BINDING DES PARAMETRES ---------------------------------
-                    Parameter[] params = method.getParameters();
-                    // Object[] args = new Object[params.length];
                     Object[] args = bindParameters(req, method);
 
-                    for (int i = 0; i < params.length; i++) 
-                    {
-                        String paramName = params[i].getName();
-                        String strValue = null;
-
-                        // // Priorité 1 : URL dynamique {id}
-                        // if (extracted.containsKey(paramName)) {
-                        //     strValue = extracted.get(paramName);
-                        // }
-                        // // Priorité 2 : POST / GET form-data
-                        // else if (req.getParameter(paramName) != null) {
-                        //     strValue = req.getParameter(paramName);
-                        // }
-
-                        // // Conversion automatique
-                        // if (params[i].getType() == int.class || params[i].getType() == Integer.class) {
-                        //     args[i] = Integer.parseInt(strValue);
-                        // }
-                        // else if (params[i].getType() == double.class || params[i].getType() == Double.class) {
-                        //     args[i] = Double.parseDouble(strValue);
-                        // }
-                        // else {
-                        //     args[i] = strValue;
-                        // }
-                    }
-
                     // --- INVOCATION ------------------------------------------------
-                    Object result = method.invoke(controller, args);
+                    Object result = method.invoke(controller, args);                    
 
                     // --- GESTION DES RESULTATS -----------------------------------
                     if (result instanceof String) {
@@ -259,7 +295,6 @@ public class FrontServlet extends HttpServlet
                         resp.getWriter().println(result);
                         return;
                     }
-
                     if (result instanceof ModelView mv) {
                         for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
                             req.setAttribute(entry.getKey(), entry.getValue());
@@ -269,12 +304,12 @@ public class FrontServlet extends HttpServlet
                         return;
                     }
 
-                    // AFFICHAGE DÉBUG ---------------------------------------------
+                    // AFFICHAGE DEBUG ---------------------------------------------
                     resp.setContentType("text/plain;charset=UTF-8");
-                    resp.getWriter().println("\n URL trouvée : " + path);
-                    resp.getWriter().println("-> Méthode HTTP : " + methodHTTP);
-                    resp.getWriter().println("-> Contrôleur : " + controllerName);
-                    resp.getWriter().println("-> Méthode : " + methodName);
+                    resp.getWriter().println("\n URL trouvee : " + path);
+                    resp.getWriter().println("-> Methode HTTP : " + methodHTTP);
+                    resp.getWriter().println("-> Controleur : " + controllerName);
+                    resp.getWriter().println("-> Methode : " + methodName);
                     return;
 
                 } catch (Exception e) {
@@ -285,10 +320,10 @@ public class FrontServlet extends HttpServlet
             }
         }
 
-        // --- AUCUNE URL TROUVÉE --------------------------------------------------
+        // --- AUCUNE URL TROUVeE --------------------------------------------------
         if (!matched) {
             resp.setContentType("text/plain;charset=UTF-8");
-            resp.getWriter().println("404 - Aucune méthode trouvée pour " + path);
+            resp.getWriter().println("404 - Aucune methode trouvee pour " + path);
         }
     }
 
@@ -325,10 +360,10 @@ public class FrontServlet extends HttpServlet
     //     //         String controllerName = method.getDeclaringClass().getSimpleName();
     //     //         String methodName = method.getName();
 
-    //     //         //  Injection automatique des paramètres (Méthode 1)
+    //     //         //  Injection automatique des paramètres (Methode 1)
     //     //         Object[] args = bindParameters(req, method);
 
-    //     //         //  Appel de la méthode avec les arguments injectés
+    //     //         //  Appel de la methode avec les arguments injectes
     //     //         Object result = method.invoke(controller, args);
 
     //     //         // --- Si le resultat est un texte simple ---------------------------
@@ -353,7 +388,7 @@ public class FrontServlet extends HttpServlet
     //     //             // dispatcher.forward(req, resp);
     //     //             // return;
 
-    //     //             // -Sprint 6 - Injecte les données dans la requête
+    //     //             // -Sprint 6 - Injecte les donnees dans la requête
     //     //             for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
     //     //                 req.setAttribute(entry.getKey(), entry.getValue());
     //     //             }
@@ -433,14 +468,14 @@ public class FrontServlet extends HttpServlet
     //                         args[i] = Integer.parseInt(strValue);
     //                     } 
     //                     else {
-    //                         args[i] = strValue; // String par défaut
+    //                         args[i] = strValue; // String par defaut
     //                     }
     //                 }
 
-    //                 // --- Appeler la méthode ---
+    //                 // --- Appeler la methode ---
     //                 Object result = method.invoke(controller, args);
 
-    //                 // --- Gérer le retour ---
+    //                 // --- Gerer le retour ---
     //                 if (result instanceof String) {
     //                     resp.setContentType("text/plain;charset=UTF-8");
     //                     resp.getWriter().println(result);
@@ -477,7 +512,7 @@ public class FrontServlet extends HttpServlet
     //     // Si aucun motif ne correspond
     //     if (!matched) {
     //         resp.setContentType("text/plain;charset=UTF-8");
-    //         resp.getWriter().println("404 - Aucune méthode trouvée pour " + path);
+    //         resp.getWriter().println("404 - Aucune methode trouvee pour " + path);
     //     }
 
     // }
