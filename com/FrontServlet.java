@@ -13,9 +13,9 @@ import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import jakarta.servlet.RequestDispatcher;
 
 import init.*;
+import java.lang.reflect.Field;
 import view.*;
 
 public class FrontServlet extends HttpServlet 
@@ -179,56 +179,106 @@ public class FrontServlet extends HttpServlet
         Parameter[] params = method.getParameters();
         Object[] args = new Object[params.length];
 
-        // Verifications : arg=Map; cle=String; valeur=Object
-        for (int i = 0; i < params.length; i++) 
-        {
-            Parameter param = params[i];
+        Map<String, String[]> requestParams = req.getParameterMap();
 
-            // Vérifier si le paramètre est une Map
-            if (Map.class.isAssignableFrom(param.getType())) 
-            {
-                // Vérification du type générique
+        for (int i = 0; i < params.length; i++) {
+
+            Parameter param = params[i];
+            Class<?> paramType = param.getType();
+
+            // --------------------------------------------
+            // 1) Gestion des Map<String, Object>
+            // --------------------------------------------
+            if (Map.class.isAssignableFrom(paramType)) {
+
+                // Vérifier les types génériques
                 Type genericType = param.getParameterizedType();
-                if (genericType instanceof ParameterizedType pt) 
-                {
+                if (genericType instanceof ParameterizedType pt) {
                     Type[] typeArgs = pt.getActualTypeArguments();
                     if (typeArgs.length != 2 ||
-                        typeArgs[0] != String.class ||
-                        typeArgs[1] != Object.class) {
+                            typeArgs[0] != String.class ||
+                            typeArgs[1] != Object.class) {
                         throw new RuntimeException(
-                            "Erreur : le paramètre Map doit être de type Map<String,Object> dans la méthode " +
-                            method.getName()
+                                "Erreur : le paramètre Map doit être de type Map<String,Object> dans la méthode "
+                                        + method.getName()
                         );
                     }
-                } 
-                else {
-                    // Pas de type générique spécifié → on considère que c'est incorrect
+                } else {
                     throw new RuntimeException(
-                        "Erreur : le paramètre Map doit avoir des types génériques dans la méthode " +
-                        method.getName()
+                            "Erreur : le paramètre Map doit avoir des types génériques dans la méthode "
+                                    + method.getName()
                     );
                 }
 
-                // Construction de la Map<String,Object> depuis les paramètres du formulaire
-                Map<String, Object> model = new HashMap<>();
-                req.getParameterMap().forEach((key, values) -> {
-                    if (values.length == 1) {
-                        model.put(key, values[0]);
-                    } else {
-                        model.put(key, Arrays.asList(values));
-                    }
+                // Construire la Map
+                Map<String, Object> map = new HashMap<>();
+                requestParams.forEach((key, values) -> {
+                    if (values.length == 1) map.put(key, values[0]);
+                    else map.put(key, Arrays.asList(values));
                 });
 
-                args[i] = model;
+                args[i] = map;
+                continue;
+            }
 
+            // --------------------------------------------
+            // 2) Gestion des objets complexes (POJO)
+            // --------------------------------------------
+            if (!paramType.isPrimitive()
+                    && !paramType.getName().startsWith("java.lang")
+                    && !paramType.isEnum()) 
+            {
+                try {
+                    Object instance = paramType.getDeclaredConstructor().newInstance();
+
+                    for (Field field : paramType.getDeclaredFields()) {
+                        String fieldName = field.getName();
+
+                        if (requestParams.containsKey(fieldName)) 
+                        {
+                            String value = requestParams.get(fieldName)[0];
+                            field.setAccessible(true);
+                            field.set(instance, convertValue(field.getType(), value));
+                        }
+                    }
+
+                    args[i] = instance;
+                    continue;
+
+                } catch (Exception e) {
+                    throw new RuntimeException(
+                            "Impossible d'instancier l'objet " + paramType.getSimpleName(), e
+                    );
+                }
+            }
+
+            // --------------------------------------------
+            // 3) Gestion des types simples (String, int, etc.)
+            // --------------------------------------------
+            if (requestParams.containsKey(param.getName())) {
+                String value = requestParams.get(param.getName())[0];
+                args[i] = convertValue(paramType, value);
             } else {
-                // Paramètre non autorisé → framework impose Map uniquement
                 args[i] = null;
             }
         }
 
         return args;
     }
+
+    private Object convertValue(Class<?> type, String value) 
+    {
+        if (type == String.class) return value;
+        if (type == int.class || type == Integer.class) return Integer.parseInt(value);
+        if (type == long.class || type == Long.class) return Long.parseLong(value);
+        if (type == double.class || type == Double.class) return Double.parseDouble(value);
+        if (type == float.class || type == Float.class) return Float.parseFloat(value);
+        if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(value);
+
+        return null; // type non géré
+    }
+
+
 
     protected void handleRequest(HttpServletRequest req, HttpServletResponse resp)
         throws IOException, ServletException 
