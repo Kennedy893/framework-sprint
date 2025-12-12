@@ -13,7 +13,10 @@ import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import com.google.gson.Gson;
+import util.JsonResponse;
 
+import annotation.JsonAnnotation;
 import init.*;
 import java.lang.reflect.Field;
 import view.*;
@@ -60,6 +63,18 @@ public class FrontServlet extends HttpServlet
             return true; 
         } 
         return false; 
+    }
+
+    private Object convertValue(Class<?> type, String value) 
+    {
+        if (type == String.class) return value;
+        if (type == int.class || type == Integer.class) return Integer.parseInt(value);
+        if (type == long.class || type == Long.class) return Long.parseLong(value);
+        if (type == double.class || type == Double.class) return Double.parseDouble(value);
+        if (type == float.class || type == Float.class) return Float.parseFloat(value);
+        if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(value);
+
+        return null; // type non géré
     }
 
     // --Sprint 6 : tsotra
@@ -266,18 +281,6 @@ public class FrontServlet extends HttpServlet
         return args;
     }
 
-    private Object convertValue(Class<?> type, String value) 
-    {
-        if (type == String.class) return value;
-        if (type == int.class || type == Integer.class) return Integer.parseInt(value);
-        if (type == long.class || type == Long.class) return Long.parseLong(value);
-        if (type == double.class || type == Double.class) return Double.parseDouble(value);
-        if (type == float.class || type == Float.class) return Float.parseFloat(value);
-        if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(value);
-
-        return null; // type non géré
-    }
-
 
 
     protected void handleRequest(HttpServletRequest req, HttpServletResponse resp)
@@ -337,7 +340,25 @@ public class FrontServlet extends HttpServlet
                     Object[] args = bindParameters(req, method);
 
                     // --- INVOCATION ------------------------------------------------
-                    Object result = method.invoke(controller, args);                    
+                    Object result = method.invoke(controller, args); 
+                    
+                    // -------------- JSON -----------------
+                    if (method.isAnnotationPresent(JsonAnnotation.class)) 
+                    {
+                        resp.setContentType("application/json;charset=UTF-8");
+
+                        Gson gson = new Gson();
+
+                        JsonResponse api = new JsonResponse(
+                                "success",
+                                200,
+                                "OK",
+                                result // data
+                        );
+
+                        resp.getWriter().print(gson.toJson(api));
+                        return;
+                    }
 
                     // --- GESTION DES RESULTATS -----------------------------------
                     if (result instanceof String) {
