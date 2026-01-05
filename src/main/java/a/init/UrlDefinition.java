@@ -1,4 +1,4 @@
-package init;
+package a.init;
 
 import java.lang.reflect.Method;
 import java.util.List;

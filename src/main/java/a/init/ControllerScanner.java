@@ -1,4 +1,4 @@
-// package init;
+// package a.init;
 
 // import annotation.ControllerAnnotation;
 // import annotation.UrlAnnotation;
@@ -14,12 +14,12 @@
 
 
 
-//     public static void scanControllers(String basePackage) 
+//     public static void scanControllers(String basepackage) 
 //     {
-//         String path = basePackage.replace('.', '/');
+//         String path = basepackage.replace('.', '/');
 //         File directory = new File(Thread.currentThread().getContextClassLoader().getResource(path).getFile());
 
-//         scanDirectory(directory, basePackage);
+//         scanDirectory(directory, basepackage);
 //     }
 
 //     private static void scanDirectory(File dir, String packageName) 
@@ -73,11 +73,11 @@
 
 
 // -- SPRINT 6 TER
-package init;
+package a.init;
 
-import annotation.ControllerAnnotation;
-import annotation.GetUrlAnnotation;
-import annotation.PostUrlAnnotation;
+import a.annotation.ControllerAnnotation;
+import a.annotation.GetUrlAnnotation;
+import a.annotation.PostUrlAnnotation;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -97,11 +97,11 @@ public class ControllerScanner
         return postMappings;
     }
 
-    public static void scanControllers(String basePackage) 
+    public static void scanControllers(String basepackage) 
     {
-        String path = basePackage.replace('.', '/');
+        String path = basepackage.replace('.', '/');
         File directory = new File(Thread.currentThread().getContextClassLoader().getResource(path).getFile());
-        scanDirectory(directory, basePackage);
+        scanDirectory(directory, basepackage);
     }
 
     // private static void scanDirectory(File dir, String packageName) 
