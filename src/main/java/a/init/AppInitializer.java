@@ -1,4 +1,4 @@
-package init;
+package a.init;
 
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;

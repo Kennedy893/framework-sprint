@@ -1,7 +1,15 @@
-package com;
+package a;
 
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.annotation.MultipartConfig;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -14,13 +22,18 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import com.google.gson.Gson;
-import util.JsonResponse;
+import a.util.JsonResponse;
 
-import annotation.JsonAnnotation;
-import init.*;
+import a.annotation.JsonAnnotation;
+import a.init.*;
 import java.lang.reflect.Field;
-import view.*;
+import a.view.*;
 
+@MultipartConfig(
+    fileSizeThreshold = 1024 * 1024,   // 1 MB
+    maxFileSize = 1024 * 1024 * 10,    // 10 MB
+    maxRequestSize = 1024 * 1024 * 50  // 50 MB
+)
 public class FrontServlet extends HttpServlet 
 {
     @Override
@@ -227,10 +240,75 @@ public class FrontServlet extends HttpServlet
 
                 // Construire la Map
                 Map<String, Object> map = new HashMap<>();
+                // Champs texte depuis requestParams (peut être vide pour multipart)
                 requestParams.forEach((key, values) -> {
                     if (values.length == 1) map.put(key, values[0]);
                     else map.put(key, Arrays.asList(values));
                 });
+
+                // Dossier de sauvegarde des uploads
+                String uploadDir = "D:/CODE/Spring/test-framework/uploads";
+                // String uploadDir = getServletContext().getRealPath("/uploads");
+                File dir = new File(uploadDir);
+                if (!dir.exists()) dir.mkdirs();
+
+                // Si multipart, extraire aussi les champs depuis les Part
+                if (req.getContentType() != null && req.getContentType().startsWith("multipart/form-data")) {
+                    try {
+                        Collection<Part> parts = req.getParts();
+                        for (Part part : parts) {
+
+                            String partName = part.getName();
+                            String submitted = part.getSubmittedFileName();
+
+                            System.out.println("DEBUG part = " + partName +
+                                    " submitted=" + submitted +
+                                    " size=" + part.getSize() +
+                                    " type=" + part.getContentType());
+
+                            // ---------- CHAMP TEXTE ----------
+                            if (submitted == null && part.getContentType() == null) {
+                                String value = new String(part.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                                map.put(partName, value);
+                            }
+
+                            // ---------- FICHIER ----------
+                            else if (submitted != null && part.getSize() > 0) {
+
+                                String fileName = Paths.get(submitted).getFileName().toString();
+
+                                File file = new File(dir, fileName);
+                                try (InputStream is = part.getInputStream();
+                                    FileOutputStream fos = new FileOutputStream(file)) {
+
+                                    is.transferTo(fos);
+                                }
+
+                                byte[] bytes = Files.readAllBytes(file.toPath());
+
+                                map.put(partName, bytes);        //  CLE = name="file"
+                                map.put("fileName", fileName);
+                                map.put("fileType", part.getContentType());
+                                map.put("filePath", file.getAbsolutePath());
+                            }
+                        }
+
+                    } catch (Exception e) {
+                        System.out.println("DEBUG upload: exception getting parts: " + e);
+                        e.printStackTrace();
+                    }
+                }
+
+                // Debug : afficher le contenu du Map (taille pour les byte[])
+                System.out.println("DEBUG upload: map entries:");
+                for (Map.Entry<String, Object> e : map.entrySet()) {
+                    Object v = e.getValue();
+                    if (v instanceof byte[]) {
+                        System.out.println("DEBUG upload: map key=" + e.getKey() + " value=byte[" + ((byte[]) v).length + "]");
+                    } else {
+                        System.out.println("DEBUG upload: map key=" + e.getKey() + " value=" + v);
+                    }
+                }
 
                 args[i] = map;
                 continue;
@@ -349,11 +427,17 @@ public class FrontServlet extends HttpServlet
 
                         Gson gson = new Gson();
 
+                        // Si la méthode retourne un ModelView, exposer directement sa map de données
+                        Object data = result;
+                        if (result instanceof ModelView mv) {
+                            data = mv.getData();
+                        }
+
                         JsonResponse api = new JsonResponse(
                                 "success",
                                 200,
                                 "OK",
-                                result // data
+                                data
                         );
 
                         resp.getWriter().print(gson.toJson(api));

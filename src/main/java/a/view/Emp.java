@@ -1,4 +1,4 @@
-package view;
+package a.view;
 
 public class Emp 
 {
