@@ -1,33 +1,41 @@
 package a;
 
-import jakarta.servlet.*;
-import jakarta.servlet.http.*;
-import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.annotation.MultipartConfig;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
+
 import com.google.gson.Gson;
-import a.util.JsonResponse;
 
 import a.annotation.JsonAnnotation;
-import a.init.*;
-import java.lang.reflect.Field;
-import a.view.*;
+import a.annotation.SessionAnnotation;
+import a.init.ControllerScanner;
+import a.init.UrlDefinition;
+import a.util.JsonResponse;
+import a.view.ModelView;
+import jakarta.servlet.RequestDispatcher;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.MultipartConfig;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.Part;
 
 @MultipartConfig(
     fileSizeThreshold = 1024 * 1024,   // 1 MB
@@ -50,33 +58,46 @@ public class FrontServlet extends HttpServlet
         handleRequest(req, resp);
     }
     
-    private boolean handleStaticFile(String relativePath, HttpServletRequest req, HttpServletResponse resp) throws IOException, ServletException 
-    { 
-        String realPath = getServletContext().getRealPath(relativePath); 
-        File file = new File(realPath); 
-        if (!file.exists() || !file.isFile()) 
-        { 
-            return false; 
-        } 
-        // JSP → doit être traite par Tomcat 
-        if (relativePath.endsWith(".jsp")) 
-        { 
-            RequestDispatcher dispatcher = req.getRequestDispatcher(relativePath); 
-            dispatcher.forward(req, resp); 
-            return true; 
-        } 
-        // HTML statique 
-        if (relativePath.endsWith(".html")) 
-        { 
-            resp.setContentType("text/html"); 
-            try (FileInputStream fis = new FileInputStream(file); 
-                OutputStream os = resp.getOutputStream()) { 
-                    fis.transferTo(os); 
-            } 
-            return true; 
-        } 
-        return false; 
+    private boolean handleStaticFile(String relativePath,
+                                 HttpServletRequest req,
+                                 HttpServletResponse resp)
+        throws IOException, ServletException {
+
+    // Ne traiter que les fichiers statiques
+    if (!relativePath.matches(".*\\.(jsp|html|css|js|png|jpg|jpeg|gif)$")) {
+        return false;
     }
+
+    String realPath = getServletContext().getRealPath(relativePath);
+    if (realPath == null) {
+        return false;
+    }
+
+    File file = new File(realPath);
+    if (!file.exists() || !file.isFile()) {
+        return false;
+    }
+
+    // JSP → Tomcat
+    if (relativePath.endsWith(".jsp")) {
+        RequestDispatcher dispatcher = req.getRequestDispatcher(relativePath);
+        dispatcher.forward(req, resp);
+        return true;
+    }
+
+    // HTML statique
+    if (relativePath.endsWith(".html")) {
+        resp.setContentType("text/html;charset=UTF-8");
+        try (FileInputStream fis = new FileInputStream(file);
+             OutputStream os = resp.getOutputStream()) {
+            fis.transferTo(os);
+        }
+        return true;
+    }
+
+    return false;
+}
+
 
     private Object convertValue(Class<?> type, String value) 
     {
@@ -209,19 +230,27 @@ public class FrontServlet extends HttpServlet
 
         Map<String, String[]> requestParams = req.getParameterMap();
 
-        for (int i = 0; i < params.length; i++) {
+        for (int i = 0; i < params.length; i++) 
+        {
 
             Parameter param = params[i];
             Class<?> paramType = param.getType();
 
+            if (paramType == HttpServletRequest.class) {
+                    args[i] = req;
+                    continue;
+                }
+
             // --------------------------------------------
             // 1) Gestion des Map<String, Object>
             // --------------------------------------------
-            if (Map.class.isAssignableFrom(paramType)) {
-
+            if (Map.class.isAssignableFrom(paramType)) 
+            {
+        
                 // Vérifier les types génériques
                 Type genericType = param.getParameterizedType();
-                if (genericType instanceof ParameterizedType pt) {
+                if (genericType instanceof ParameterizedType pt) 
+                {
                     Type[] typeArgs = pt.getActualTypeArguments();
                     if (typeArgs.length != 2 ||
                             typeArgs[0] != String.class ||
@@ -231,12 +260,33 @@ public class FrontServlet extends HttpServlet
                                         + method.getName()
                         );
                     }
-                } else {
+                } 
+                else {
                     throw new RuntimeException(
                             "Erreur : le paramètre Map doit avoir des types génériques dans la méthode "
                                     + method.getName()
                     );
                 }
+
+
+                // Vérifier si la méthode est annotée @Session
+                if (method.isAnnotationPresent(SessionAnnotation.class)) 
+                {
+                    Map<String, Object> sessionMap = new HashMap<>();
+                    HttpSession httpSession = req.getSession(false);
+
+                    if (httpSession != null) {
+                        Enumeration<String> names = httpSession.getAttributeNames();
+                        while (names.hasMoreElements()) {
+                            String key = names.nextElement();
+                            sessionMap.put(key, httpSession.getAttribute(key));
+                        }
+                    }
+
+                    args[i] = sessionMap;
+                    continue; // pour ne pas aller plus loin
+                }
+                    
 
                 // Construire la Map
                 Map<String, Object> map = new HashMap<>();
@@ -253,7 +303,8 @@ public class FrontServlet extends HttpServlet
                 if (!dir.exists()) dir.mkdirs();
 
                 // Si multipart, extraire aussi les champs depuis les Part
-                if (req.getContentType() != null && req.getContentType().startsWith("multipart/form-data")) {
+                if (req.getContentType() != null && req.getContentType().startsWith("multipart/form-data")) 
+                {
                     try {
                         Collection<Part> parts = req.getParts();
                         for (Part part : parts) {
@@ -445,13 +496,24 @@ public class FrontServlet extends HttpServlet
                     }
 
                     // --- GESTION DES RESULTATS -----------------------------------
-                    if (result instanceof String) {
+                    if (result instanceof String) 
+                    {
                         resp.setContentType("text/plain;charset=UTF-8");
                         resp.getWriter().println(result);
                         return;
                     }
-                    if (result instanceof ModelView mv) {
-                        for (Map.Entry<String, Object> entry : mv.getData().entrySet()) {
+                    if (result instanceof ModelView mv) 
+                    {
+                        String view = mv.getView();
+
+                        // REDIRECTION
+                        if (view.startsWith("redirect:")) {
+                            String target = view.substring("redirect:".length());
+                            resp.sendRedirect(req.getContextPath() + target);
+                            return;
+                        }
+
+                        for (Map.Entry<String, Object> entry : mv.getData().entrySet())  {
                             req.setAttribute(entry.getKey(), entry.getValue());
                         }
                         RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + mv.getView());
