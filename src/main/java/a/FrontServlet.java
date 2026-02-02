@@ -22,6 +22,7 @@ import java.util.Map;
 
 import com.google.gson.Gson;
 
+import a.annotation.AuthAnnotation;
 import a.annotation.JsonAnnotation;
 import a.annotation.SessionAnnotation;
 import a.init.ControllerScanner;
@@ -410,6 +411,52 @@ public class FrontServlet extends HttpServlet
         return args;
     }
 
+    private void checkAuthorization(HttpServletRequest req, Method method)
+            throws ServletException {
+
+        // 🔎 Annotation sur méthode ou classe
+        AuthAnnotation auth = method.getAnnotation(AuthAnnotation.class);
+        if (auth == null) {
+            auth = method.getDeclaringClass().getAnnotation(AuthAnnotation.class);
+        }
+
+        if (auth == null) {
+            return; // accès libre
+        }
+
+        HttpSession session = req.getSession(false);
+        if (session == null) {
+            throw new ServletException("Accès refusé : utilisateur non connecté");
+        }
+
+        Object roleObj = session.getAttribute("role");
+        if (roleObj == null) {
+            throw new ServletException("Accès refusé : rôle absent");
+        }
+
+        int userRole;
+        try {
+            userRole = (int) roleObj;
+        } catch (ClassCastException e) {
+            throw new ServletException("Rôle invalide en session");
+        }
+
+        int[] allowedRoles = auth.roles();
+
+        // connecté suffit
+        if (allowedRoles.length == 0) {
+            return;
+        }
+
+        for (int r : allowedRoles) {
+            if (r == userRole) {
+                return; // autorisé
+            }
+        }
+
+        throw new ServletException("Accès refusé : permissions insuffisantes");
+    }
+
 
 
     protected void handleRequest(HttpServletRequest req, HttpServletResponse resp)
@@ -467,6 +514,9 @@ public class FrontServlet extends HttpServlet
 
                     // --- BINDING DES PARAMETRES ---------------------------------
                     Object[] args = bindParameters(req, method);
+
+                    // --- VERIFICATION AUTHENTIFICATION / AUTHORIZATION -----------
+                    checkAuthorization(req, method);
 
                     // --- INVOCATION ------------------------------------------------
                     Object result = method.invoke(controller, args); 
